@@ -55,6 +55,7 @@ const client = new MongoClient(process.env.MONGODB_URI, {
 async function run() {
   try {
     const db = client.db("blood-donationDB");
+    const usersCollection = db.collection("users");
 
 
 
