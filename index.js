@@ -85,26 +85,27 @@ async function run() {
       const result = await donationRequestCollection.insertOne(request);
       res.send({ success: true, insertedId: result.insertedId });
     });
+    // get donation requests (admin / filter)
+    app.get("/donation-requests", async (req, res) => {
+      const { email, status, limit } = req.query;
 
+      let query = {};
+      if (email) query.requesterEmail = email;
+      if (status) query.status = status;
 
+      let cursor = donationRequestCollection
+        .find(query)
+        .sort({ createdAt: -1 });
 
+      if (limit) {
+        cursor = cursor.limit(parseInt(limit));
+      }
 
+      const result = await cursor.toArray();
+      res.send(result);
+    });
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    
 
 
 
