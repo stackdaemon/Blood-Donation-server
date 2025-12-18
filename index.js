@@ -105,7 +105,31 @@ async function run() {
       res.send(result);
     });
 
-    
+    const { ObjectId } = require("mongodb");
+    // donation details
+    app.get("/donation-requests/:id", async (req, res) => {
+      try {
+        const { id } = req.params;
+
+        const result = await donationRequestCollection.findOne({
+          _id: new ObjectId(id),
+        });
+
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: "Failed to get donation request" });
+      }
+    });
+    // update user profile
+
+
+
+
+
+
+
+
+
 
 
 
