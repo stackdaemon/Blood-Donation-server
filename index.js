@@ -122,15 +122,43 @@ async function run() {
     });
     // update user profile
 
+    // Update user profile
+    app.patch("/users/:email", verifyJWT, async (req, res) => {
+      const { email } = req.params;
+      const updateData = { ...req.body };
 
+      delete updateData.email;
 
+      if (Object.keys(updateData).length === 0) {
+        return res
+          .status(400)
+          .send({ success: false, message: "No data to update" });
+      }
 
+      try {
+        const user = await usersCollection.findOne({ email });
+        if (!user) return res.status(404).send({ message: "User not found" });
+        if (req.tokenEmail !== email)
+          return res.status(403).send({ message: "Forbidden" });
 
+        const result = await usersCollection.updateOne(
+          { email },
+          { $set: updateData }
+        );
 
-
-
-
-
+        res.send({
+          success: true,
+          message: "Profile updated successfully",
+          result,
+        });
+      } catch (err) {
+        console.error(err);
+        res
+          .status(500)
+          .send({ success: false, message: "Failed to update profile" });
+      }
+    });
+   // donation & progress
 
 
 
