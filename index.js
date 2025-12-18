@@ -58,7 +58,18 @@ async function run() {
     const usersCollection = db.collection("users");
     const donationRequestCollection = db.collection
     ("donationRequests");
+    const fundsCollection = db.collection("funds");
 
+    //signUp data ---> db
+    app.post("/users", async (req, res) => {
+      const user = req.body;
+      const isExist = await usersCollection.findOne({ email: user.email });
+      if (isExist) {
+        return res.send({ message: "User already exists" });
+      }
+      const result = await usersCollection.insertOne(user);
+      res.send(result);
+    });
 
 
 
