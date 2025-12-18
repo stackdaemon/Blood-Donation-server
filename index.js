@@ -159,6 +159,43 @@ async function run() {
       }
     });
    // donation & progress
+// PATCH /donation-requests/:id/donate
+app.patch("/donation-requests/:id/donate", verifyJWT, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const request = await donationRequestCollection.findOne({
+      _id: new ObjectId(id),
+    });
+
+    if (!request)
+      return res.status(404).send({ success: false, message: "Request not found" });
+
+    if (request.status !== "pending")
+      return res.status(400).send({ success: false, message: "Request already in progress or completed" });
+
+    const updateData = {
+      status: "inprogress",
+      donorName: req.tokenEmail ? req.tokenEmail : "Anonymous",
+      donorEmail: req.tokenEmail,
+      donatedAt: new Date(),
+    };
+
+    const result = await donationRequestCollection.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: updateData }
+    );
+
+    res.send({ success: true, message: "Donation confirmed", result });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send({ success: false, message: "Failed to confirm donation" });
+  }
+});
+
+
+
+
 
 
 
