@@ -76,6 +76,15 @@ async function run() {
       res.send(result);
     });
     
+    // create donation request
+    app.post("/donation-requests", async (req, res) => {
+      const request = req.body;
+      request.status = "pending";
+      request.createdAt = new Date();
+
+      const result = await donationRequestCollection.insertOne(request);
+      res.send({ success: true, insertedId: result.insertedId });
+    });
 
 
 
