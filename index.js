@@ -192,12 +192,56 @@ app.patch("/donation-requests/:id/donate", verifyJWT, async (req, res) => {
     res.status(500).send({ success: false, message: "Failed to confirm donation" });
   }
 });
+// =======================
+// PATCH (edit donation request)
+// =======================
+app.patch("/donation-requests/:id", async (req, res) => {
+  const { id } = req.params;
+  const updateData = req.body;
+
+  delete updateData._id; // ✅ double safety
+
+  try {
+    const result = await donationRequestCollection.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: updateData }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).send({
+        success: false,
+        message: "Request not found",
+      });
+    }
+
+    res.send({
+      success: true,
+      message: "Donation request updated successfully",
+    });
+  } catch (err) {
+    res.status(500).send({
+      success: false,
+      message: err.message, // 🔥 real error পাঠাও
+    });
+  }
+});
 
 
-
-
-
-
+// =======================
+// DELETE donation request
+// =======================
+app.delete("/donation-requests/:id", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await donationRequestCollection.deleteOne({ _id: new ObjectId(id) });
+    if (result.deletedCount === 0) {
+      return res.status(404).send({ success: false, message: "Request not found" });
+    }
+    res.send({ success: true, message: "Donation request deleted successfully" });
+  } catch (err) {
+    res.status(500).send({ success: false, message: err.message });
+  }
+});
 
 
 
