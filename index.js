@@ -70,6 +70,12 @@ async function run() {
       const result = await usersCollection.insertOne(user);
       res.send(result);
     });
+    // get all users data from db
+    app.get("/users", async (req, res) => {
+      const result = await usersCollection.find().toArray();
+      res.send(result);
+    });
+    
 
 
 
