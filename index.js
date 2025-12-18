@@ -243,6 +243,52 @@ app.delete("/donation-requests/:id", async (req, res) => {
   }
 });
 
+// admin user block
+app.patch("/users/:id", async (req, res) => {
+  const { id } = req.params;
+  const updateData = req.body; // { status: "blocked" } or { role: "admin" }
+
+  try {
+    const result = await usersCollection.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: updateData }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).send({ success: false, message: "User not found" });
+    }
+
+    res.send({ success: true, message: "User updated successfully" });
+  } catch (error) {
+    res.status(500).send({ success: false, message: "Server error", error });
+  }
+});
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
