@@ -56,6 +56,8 @@ async function run() {
   try {
     const db = client.db("blood-donationDB");
     const usersCollection = db.collection("users");
+    const donationRequestCollection = db.collection
+    ("donationRequests");
 
 
 
