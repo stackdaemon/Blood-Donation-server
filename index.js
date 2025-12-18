@@ -17,11 +17,7 @@ const app = express();
 // middleware
 app.use(
   cors({
-    origin: [
-      "http://localhost:5173",
-      "http://localhost:5174",
-      "https://b12-m11-session.web.app",
-    ],
+    origin: [process.env.CLIENT_DOMAIN],
     credentials: true,
     optionSuccessStatus: 200,
   })
@@ -56,8 +52,7 @@ async function run() {
   try {
     const db = client.db("blood-donationDB");
     const usersCollection = db.collection("users");
-    const donationRequestCollection = db.collection
-    ("donationRequests");
+    const donationRequestCollection = db.collection("donationRequests");
     const fundsCollection = db.collection("funds");
 
     //signUp data ---> db
@@ -75,7 +70,7 @@ async function run() {
       const result = await usersCollection.find().toArray();
       res.send(result);
     });
-    
+
     // create donation request
     app.post("/donation-requests", async (req, res) => {
       const request = req.body;
@@ -120,215 +115,327 @@ async function run() {
         res.status(500).send({ message: "Failed to get donation request" });
       }
     });
-    // update user profile
 
     // Update user profile
-    app.patch("/users/:email", verifyJWT, async (req, res) => {
-      const { email } = req.params;
-      const updateData = { ...req.body };
+   // =====================
+app.patch("/users/:email", async (req, res) => {
+  const { email } = req.params;
+  const updateData = { ...req.body };
 
-      delete updateData.email;
+  // Prevent email update
+  delete updateData.email;
 
-      if (Object.keys(updateData).length === 0) {
-        return res
-          .status(400)
-          .send({ success: false, message: "No data to update" });
-      }
+  // Remove undefined or null fields to avoid overwriting
+  Object.keys(updateData).forEach(
+    (key) => updateData[key] === undefined && delete updateData[key]
+  );
+
+  try {
+    const result = await usersCollection.updateOne(
+      { email },
+      { $set: updateData }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).send({ message: "User not found" });
+    }
+
+    res.send({ message: "Profile updated successfully" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send({ message: "Server error" });
+  }
+});
+
+    // donation & progress
+    // PATCH /donation-requests/:id/donate
+    app.patch("/donation-requests/:id/donate", verifyJWT, async (req, res) => {
+      const { id } = req.params;
 
       try {
-        const user = await usersCollection.findOne({ email });
-        if (!user) return res.status(404).send({ message: "User not found" });
-        if (req.tokenEmail !== email)
-          return res.status(403).send({ message: "Forbidden" });
+        const request = await donationRequestCollection.findOne({
+          _id: new ObjectId(id),
+        });
 
-        const result = await usersCollection.updateOne(
-          { email },
+        if (!request)
+          return res
+            .status(404)
+            .send({ success: false, message: "Request not found" });
+
+        if (request.status !== "pending")
+          return res
+            .status(400)
+            .send({
+              success: false,
+              message: "Request already in progress or completed",
+            });
+
+        const updateData = {
+          status: "inprogress",
+          donorName: req.tokenEmail ? req.tokenEmail : "Anonymous",
+          donorEmail: req.tokenEmail,
+          donatedAt: new Date(),
+        };
+
+        const result = await donationRequestCollection.updateOne(
+          { _id: new ObjectId(id) },
           { $set: updateData }
         );
 
-        res.send({
-          success: true,
-          message: "Profile updated successfully",
-          result,
-        });
+        res.send({ success: true, message: "Donation confirmed", result });
       } catch (err) {
         console.error(err);
         res
           .status(500)
-          .send({ success: false, message: "Failed to update profile" });
+          .send({ success: false, message: "Failed to confirm donation" });
       }
     });
-   // donation & progress
-// PATCH /donation-requests/:id/donate
-app.patch("/donation-requests/:id/donate", verifyJWT, async (req, res) => {
-  const { id } = req.params;
+    // =======================
+    // PATCH (edit donation request)
+    // =======================
+    app.patch("/donation-requests/:id", async (req, res) => {
+      const { id } = req.params;
+      const updateData = req.body;
 
-  try {
-    const request = await donationRequestCollection.findOne({
-      _id: new ObjectId(id),
+      delete updateData._id; // ✅ double safety
+
+      try {
+        const result = await donationRequestCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: updateData }
+        );
+
+        if (result.matchedCount === 0) {
+          return res.status(404).send({
+            success: false,
+            message: "Request not found",
+          });
+        }
+
+        res.send({
+          success: true,
+          message: "Donation request updated successfully",
+        });
+      } catch (err) {
+        res.status(500).send({
+          success: false,
+          message: err.message, // 🔥 real error পাঠাও
+        });
+      }
     });
 
-    if (!request)
-      return res.status(404).send({ success: false, message: "Request not found" });
+    // =======================
+    // DELETE donation request
+    // =======================
+    app.delete("/donation-requests/:id", async (req, res) => {
+      const { id } = req.params;
+      try {
+        const result = await donationRequestCollection.deleteOne({
+          _id: new ObjectId(id),
+        });
+        if (result.deletedCount === 0) {
+          return res
+            .status(404)
+            .send({ success: false, message: "Request not found" });
+        }
+        res.send({
+          success: true,
+          message: "Donation request deleted successfully",
+        });
+      } catch (err) {
+        res.status(500).send({ success: false, message: err.message });
+      }
+    });
 
-    if (request.status !== "pending")
-      return res.status(400).send({ success: false, message: "Request already in progress or completed" });
+    // admin user block
+    app.patch("/users/:id", async (req, res) => {
+      const { id } = req.params;
+      const updateData = req.body;
+      try {
+        const result = await usersCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: updateData }
+        );
 
-    const updateData = {
-      status: "inprogress",
-      donorName: req.tokenEmail ? req.tokenEmail : "Anonymous",
-      donorEmail: req.tokenEmail,
-      donatedAt: new Date(),
+        if (result.matchedCount === 0) {
+          return res
+            .status(404)
+            .send({ success: false, message: "User not found" });
+        }
+
+        res.send({ success: true, message: "User updated successfully" });
+      } catch (error) {
+        res
+          .status(500)
+          .send({ success: false, message: "Server error", error });
+      }
+    });
+
+    // get a user's role
+    app.get("/user/role", verifyJWT, async (req, res) => {
+      const result = await usersCollection.findOne({ email: req.tokenEmail });
+      res.send({ role: result?.role });
+    });
+
+    // Block/Unblock user
+    app.patch("/users/:id/status", async (req, res) => {
+      const { id } = req.params;
+      const { status } = req.body;
+
+      try {
+        const result = await usersCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { status } }
+        );
+
+        if (result.matchedCount === 0) {
+          return res
+            .status(404)
+            .send({ success: false, message: "User not found" });
+        }
+
+        res.send({ success: true, message: "Status updated successfully" });
+      } catch (error) {
+        console.error(error);
+        res.status(500).send({ success: false, message: "Server error" });
+      }
+    });
+
+    // Change user role
+    app.patch("/users/:id/role", async (req, res) => {
+      const { id } = req.params;
+      const { role } = req.body; // "volunteer" বা "admin"
+
+      try {
+        const result = await usersCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { role } }
+        );
+
+        if (result.matchedCount === 0) {
+          return res
+            .status(404)
+            .send({ success: false, message: "User not found" });
+        }
+
+        res.send({ success: true, message: "Role updated successfully" });
+      } catch (error) {
+        console.error(error);
+        res.status(500).send({ success: false, message: "Server error" });
+      }
+    });
+
+    // ============================
+    // 🔹 Funding Routes
+    // ============================
+
+    // =====================
+    // JWT Middleware
+    // =====================
+    const verifyJWT1 = async (req, res, next) => {
+      const authHeader = req.headers.authorization;
+      if (!authHeader) {
+        return res.status(401).send({ message: "Unauthorized" });
+      }
+
+      const token = authHeader.split(" ")[1];
+
+      try {
+        const decoded = await admin.auth().verifyIdToken(token);
+        req.tokenEmail = decoded.email;
+        next();
+      } catch (error) {
+        console.error("JWT Error:", error);
+        res.status(401).send({ message: "Unauthorized" });
+      }
     };
 
-    const result = await donationRequestCollection.updateOne(
-      { _id: new ObjectId(id) },
-      { $set: updateData }
-    );
+    // =====================
+    // GET all funds
+    // =====================
+    app.get("/funds", verifyJWT1, async (req, res) => {
+      try {
+        const funds = await fundsCollection.find().sort({ date: -1 }).toArray();
 
-    res.send({ success: true, message: "Donation confirmed", result });
-  } catch (err) {
-    console.error(err);
-    res.status(500).send({ success: false, message: "Failed to confirm donation" });
-  }
-});
-// =======================
-// PATCH (edit donation request)
-// =======================
-app.patch("/donation-requests/:id", async (req, res) => {
-  const { id } = req.params;
-  const updateData = req.body;
-
-  delete updateData._id; // ✅ double safety
-
-  try {
-    const result = await donationRequestCollection.updateOne(
-      { _id: new ObjectId(id) },
-      { $set: updateData }
-    );
-
-    if (result.matchedCount === 0) {
-      return res.status(404).send({
-        success: false,
-        message: "Request not found",
-      });
-    }
-
-    res.send({
-      success: true,
-      message: "Donation request updated successfully",
+        res.send(funds);
+      } catch (error) {
+        res.status(500).send({ message: "Failed to load funds" });
+      }
     });
-  } catch (err) {
-    res.status(500).send({
-      success: false,
-      message: err.message, // 🔥 real error পাঠাও
+
+    // =====================
+    // Stripe Checkout
+    // =====================
+    app.post("/create-checkout-session", verifyJWT1, async (req, res) => {
+      const { amount, name, email } = req.body;
+
+      if (!amount || amount < 1) {
+        return res.status(400).send({ message: "Invalid amount" });
+      }
+
+      try {
+        const session = await stripe.checkout.sessions.create({
+          payment_method_types: ["card"],
+          mode: "payment",
+          line_items: [
+            {
+              price_data: {
+                currency: "usd",
+                product_data: {
+                  name: "Blood Donation Fund",
+                },
+                unit_amount: amount * 100,
+              },
+              quantity: 1,
+            },
+          ],
+          success_url: `${process.env.CLIENT_DOMAIN}/payment-success?amount=${amount}&name=${name}&email=${email}`,
+          
+          cancel_url: `${process.env.CLIENT_DOMAIN}/funding`,
+        });
+
+        res.send({ url: session.url });
+      } catch (error) {
+        console.error("Stripe Error:", error);
+        res.status(500).send({ message: "Stripe session failed" });
+      }
     });
-  }
+
+    // =====================
+    // Save fund after success
+    // =====================
+    app.post("/funds", verifyJWT1, async (req, res) => {
+      const { name, email, amount } = req.body;
+
+      try {
+        const fund = {
+          name,
+          email,
+          amount: Number(amount),
+          date: new Date(),
+        };
+
+        const result = await fundsCollection.insertOne(fund);
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: "Failed to save fund" });
+      }
+    });
+
+// susscess
+app.post("/funds", verifyJWT, async (req, res) => {
+  const { name, email, amount } = req.body;
+
+  const fund = {
+    name,
+    email,
+    amount: Number(amount),
+    date: new Date(),
+  };
+
+  await fundsCollection.insertOne(fund);
+  res.send({ success: true });
 });
-
-
-// =======================
-// DELETE donation request
-// =======================
-app.delete("/donation-requests/:id", async (req, res) => {
-  const { id } = req.params;
-  try {
-    const result = await donationRequestCollection.deleteOne({ _id: new ObjectId(id) });
-    if (result.deletedCount === 0) {
-      return res.status(404).send({ success: false, message: "Request not found" });
-    }
-    res.send({ success: true, message: "Donation request deleted successfully" });
-  } catch (err) {
-    res.status(500).send({ success: false, message: err.message });
-  }
-});
-
-// admin user block
-app.patch("/users/:id", async (req, res) => {
-  const { id } = req.params;
-  const updateData = req.body; // { status: "blocked" } or { role: "admin" }
-
-  try {
-    const result = await usersCollection.updateOne(
-      { _id: new ObjectId(id) },
-      { $set: updateData }
-    );
-
-    if (result.matchedCount === 0) {
-      return res.status(404).send({ success: false, message: "User not found" });
-    }
-
-    res.send({ success: true, message: "User updated successfully" });
-  } catch (error) {
-    res.status(500).send({ success: false, message: "Server error", error });
-  }
-});
-
-// get a user's role
-    app.get('/user/role', verifyJWT, async (req, res) => {
-      const result = await usersCollection.findOne({ email: req.tokenEmail })
-      res.send({ role: result?.role })
-    })
-
-    
-// Block/Unblock user
-app.patch("/users/:id/status", async (req, res) => {
-  const { id } = req.params;
-  const { status } = req.body;
-
-  try {
-    const result = await usersCollection.updateOne(
-      { _id: new ObjectId(id) },
-      { $set: { status } }
-    );
-
-    if (result.matchedCount === 0) {
-      return res.status(404).send({ success: false, message: "User not found" });
-    }
-
-    res.send({ success: true, message: "Status updated successfully" });
-  } catch (error) {
-    console.error(error);
-    res.status(500).send({ success: false, message: "Server error" });
-  }
-});
-
-// Change user role
-app.patch("/users/:id/role", async (req, res) => {
-  const { id } = req.params;
-  const { role } = req.body; // "volunteer" বা "admin"
-
-  try {
-    const result = await usersCollection.updateOne(
-      { _id: new ObjectId(id) },
-      { $set: { role } }
-    );
-
-    if (result.matchedCount === 0) {
-      return res.status(404).send({ success: false, message: "User not found" });
-    }
-
-    res.send({ success: true, message: "Role updated successfully" });
-  } catch (error) {
-    console.error(error);
-    res.status(500).send({ success: false, message: "Server error" });
-  }
-});
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
