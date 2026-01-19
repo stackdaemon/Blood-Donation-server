@@ -71,7 +71,7 @@ async function run() {
       res.send(result);
     });
 
-    // create donation request
+    // create donation requestddd
     app.post("/donation-requests", async (req, res) => {
       const request = req.body;
       request.status = "pending";
@@ -325,10 +325,6 @@ app.patch("/users/:email", async (req, res) => {
       }
     });
 
-    // ============================
-    // 🔹 Funding Routes
-    // ============================
-
     // =====================
     // JWT Middleware
     // =====================
@@ -436,6 +432,7 @@ app.post("/funds", verifyJWT, async (req, res) => {
   await fundsCollection.insertOne(fund);
   res.send({ success: true });
 });
+
 
 
 
